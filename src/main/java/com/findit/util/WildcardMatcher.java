@@ -15,7 +15,7 @@ public final class WildcardMatcher {
      * All other regex metacharacters are escaped so they are treated literally.
      */
     public static Pattern toPattern(String wildcard, boolean caseSensitive) {
-        StringBuilder regex = new StringBuilder();
+        StringBuilder regex = new StringBuilder("^"); // anchor start
         for (int i = 0; i < wildcard.length(); i++) {
             char c = wildcard.charAt(i);
             if (c == '*') {
@@ -23,13 +23,13 @@ public final class WildcardMatcher {
             } else if (c == '?') {
                 regex.append('.');
             } else {
-                // Escape regex metacharacters
                 if ("\\.[]{}()+^$|".indexOf(c) >= 0) {
                     regex.append('\\');
                 }
                 regex.append(c);
             }
         }
+        regex.append("$"); // anchor end
         int flags = caseSensitive ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
         return Pattern.compile(regex.toString(), flags);
     }

@@ -205,6 +205,7 @@ public class Main extends Application {
 
     private void shutdown() {
         LOG.info("Shutting down FindIT");
+        if (indexStore != null) indexStore.close();
         Platform.exit();
         System.exit(0);
     }

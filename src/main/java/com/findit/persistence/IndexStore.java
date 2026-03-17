@@ -31,31 +31,38 @@ public class IndexStore {
             CREATE INDEX IF NOT EXISTS idx_name ON file_index(name COLLATE NOCASE);
             """;
 
+    /** Single shared connection — all methods synchronize on this. */
+    private final Connection conn;
+
     public IndexStore() {
         new File(DB_DIR).mkdirs();
-        try (Connection c = connect(); Statement s = c.createStatement()) {
-            for (String stmt : DDL.split(";")) {
-                String sql = stmt.trim();
-                if (!sql.isEmpty()) s.execute(sql);
+        Connection c = null;
+        try {
+            c = DriverManager.getConnection(JDBC_URL);
+            try (Statement s = c.createStatement()) {
+                // WAL mode: readers never block writers, writers never block readers
+                s.execute("PRAGMA journal_mode=WAL");
+                // NORMAL sync is safe with WAL and much faster than FULL
+                s.execute("PRAGMA synchronous=NORMAL");
+                // Larger cache = fewer disk reads on bulk load
+                s.execute("PRAGMA cache_size=-65536"); // 64 MB
+                for (String stmt : DDL.split(";")) {
+                    String sql = stmt.trim();
+                    if (!sql.isEmpty()) s.execute(sql);
+                }
             }
         } catch (SQLException e) {
-            LOG.error("Failed to initialize SQLite schema", e);
+            LOG.error("Failed to initialize SQLite", e);
         }
-    }
-
-    // ── Connection helper ─────────────────────────────────────────────────────
-
-    private Connection connect() throws SQLException {
-        return DriverManager.getConnection(JDBC_URL);
+        this.conn = c;
     }
 
     // ── Load all rows ─────────────────────────────────────────────────────────
 
-    public List<FileEntry> load() {
+    public synchronized List<FileEntry> load() {
         List<FileEntry> list = new ArrayList<>();
         String sql = "SELECT path, name, size, modified, is_dir FROM file_index";
-        try (Connection c = connect();
-             PreparedStatement ps = c.prepareStatement(sql);
+        try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 list.add(new FileEntry(
@@ -73,13 +80,14 @@ public class IndexStore {
 
     // ── Bulk save ─────────────────────────────────────────────────────────────
 
-    public void save(List<FileEntry> entries) {
+    public synchronized void save(List<FileEntry> entries) {
         String sql = "INSERT OR REPLACE INTO file_index(path,name,size,modified,is_dir) VALUES(?,?,?,?,?)";
-        try (Connection c = connect()) {
-            c.setAutoCommit(false);
-            try (PreparedStatement ps = c.prepareStatement(sql)) {
-                // Clear table first
-                try (Statement st = c.createStatement()) { st.execute("DELETE FROM file_index"); }
+        try {
+            conn.setAutoCommit(false);
+            try (Statement st = conn.createStatement()) {
+                st.execute("DELETE FROM file_index");
+            }
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 int batch = 0;
                 for (FileEntry e : entries) {
                     ps.setString(1, e.path());
@@ -91,11 +99,13 @@ public class IndexStore {
                     if (++batch % 10_000 == 0) ps.executeBatch();
                 }
                 ps.executeBatch();
-                c.commit();
+                conn.commit();
                 LOG.info("Saved {} entries to SQLite", entries.size());
             } catch (SQLException ex) {
-                c.rollback();
+                conn.rollback();
                 throw ex;
+            } finally {
+                conn.setAutoCommit(true);
             }
         } catch (SQLException e) {
             LOG.error("Failed to save index to SQLite", e);
@@ -104,9 +114,9 @@ public class IndexStore {
 
     // ── Incremental operations ────────────────────────────────────────────────
 
-    public void upsert(FileEntry e) {
+    public synchronized void upsert(FileEntry e) {
         String sql = "INSERT OR REPLACE INTO file_index(path,name,size,modified,is_dir) VALUES(?,?,?,?,?)";
-        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement(sql)) {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, e.path());
             ps.setString(2, e.name());
             ps.setLong(3, e.size());
@@ -118,9 +128,9 @@ public class IndexStore {
         }
     }
 
-    public void delete(String path) {
-        try (Connection c = connect();
-             PreparedStatement ps = c.prepareStatement("DELETE FROM file_index WHERE path=?")) {
+    public synchronized void delete(String path) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "DELETE FROM file_index WHERE path=?")) {
             ps.setString(1, path);
             ps.executeUpdate();
         } catch (SQLException e) {
@@ -128,13 +138,18 @@ public class IndexStore {
         }
     }
 
-    public long count() {
-        try (Connection c = connect();
-             Statement s = c.createStatement();
+    public synchronized long count() {
+        try (Statement s = conn.createStatement();
              ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM file_index")) {
             return rs.next() ? rs.getLong(1) : 0;
         } catch (SQLException e) {
             return 0;
         }
+    }
+
+    /** Call on application exit to cleanly close the shared connection. */
+    public synchronized void close() {
+        try { if (conn != null && !conn.isClosed()) conn.close(); }
+        catch (SQLException ignored) {}
     }
 }

@@ -32,7 +32,7 @@ class SearchEngineTest {
     private List<FileEntry> searchSync(String q, boolean matchCase, boolean wholeWord, boolean matchPath, boolean regex) throws Exception {
         CountDownLatch latch = new CountDownLatch(1);
         java.util.concurrent.atomic.AtomicReference<List<FileEntry>> result = new java.util.concurrent.atomic.AtomicReference<>();
-        engine.search(q, matchCase, wholeWord, matchPath, regex, 100_000, found -> {
+        engine.search(q, matchCase, wholeWord, matchPath, regex, 100_000, (found, duration) -> {
             result.set(found);
             latch.countDown();
         });
@@ -101,7 +101,7 @@ class SearchEngineTest {
         SearchEngine bigEngine = new SearchEngine(bigIndex);
         long start = System.currentTimeMillis();
         CountDownLatch latch = new CountDownLatch(1);
-        bigEngine.search("file_500000", false, false, false, false, 100_000, r -> latch.countDown());
+        bigEngine.search("file_500000", false, false, false, false, 100_000, (r, d) -> latch.countDown());
         assertTrue(latch.await(10, TimeUnit.SECONDS));
         long elapsed = System.currentTimeMillis() - start;
         assertTrue(elapsed < 5000, "Search over 1M entries took " + elapsed + "ms (expected <5000ms)");

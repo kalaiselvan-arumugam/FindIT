@@ -4,7 +4,8 @@ import com.findit.model.FileEntry;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Thread-safe in-memory store of indexed {@link FileEntry} objects.
@@ -13,54 +14,89 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class FileIndex {
 
-    private final CopyOnWriteArrayList<FileEntry> entries = new CopyOnWriteArrayList<>();
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    private final List<FileEntry> entries = new ArrayList<>(1_500_000);
 
     public void add(FileEntry entry) {
-        entries.add(entry);
+        lock.writeLock().lock();
+        try { entries.add(entry); }
+        finally { lock.writeLock().unlock(); }
     }
 
     public void addAll(List<FileEntry> list) {
-        entries.addAll(list);
+        lock.writeLock().lock();
+        try { entries.addAll(list); }
+        finally { lock.writeLock().unlock(); }
     }
 
     public void setAll(List<FileEntry> list) {
-        entries.clear();
-        entries.addAll(list);
+        lock.writeLock().lock();
+        try { entries.clear(); entries.addAll(list); }
+        finally { lock.writeLock().unlock(); }
     }
-
 
     /** Remove the entry whose absolute path equals {@code path}. */
     public boolean remove(String path) {
-        return entries.removeIf(e -> e.path().equals(path));
+        lock.writeLock().lock();
+        try { return entries.removeIf(e -> e.path().equals(path)); }
+        finally { lock.writeLock().unlock(); }
     }
 
-    /** Replace an existing entry by path (used for modify events). */
+    /**
+     * Atomic replace — entry never disappears from the index during the swap.
+     * Previously used remove() + add() which had a visibility gap.
+     */
     public void update(FileEntry updated) {
-        remove(updated.path());
-        entries.add(updated);
+        lock.writeLock().lock();
+        try {
+            entries.replaceAll(e -> e.path().equals(updated.path()) ? updated : e);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
-    /** Returns a stable snapshot suitable for iteration / search. */
+    /**
+     * Returns a plain-array snapshot for use in parallel search streams.
+     * Callers must NOT hold the read lock before calling this.
+     */
+    public FileEntry[] snapshot() {
+        lock.readLock().lock();
+        try { return entries.toArray(new FileEntry[0]); }
+        finally { lock.readLock().unlock(); }
+    }
+
+    /** Returns a List copy. Prefer snapshot() for search; use getAll() for watcher setup. */
     public List<FileEntry> getAll() {
-        return entries; // CopyOnWriteArrayList.iterator() already provides a snapshot
+        lock.readLock().lock();
+        try { return new ArrayList<>(entries); }
+        finally { lock.readLock().unlock(); }
     }
 
     public void clear() {
-        entries.clear();
+        lock.writeLock().lock();
+        try { entries.clear(); }
+        finally { lock.writeLock().unlock(); }
     }
 
     public int size() {
-        return entries.size();
+        lock.readLock().lock();
+        try { return entries.size(); }
+        finally { lock.readLock().unlock(); }
     }
 
     /** Collect all unique parent-directory paths for FileWatcher registration. */
     public List<String> getAllDirectoryPaths() {
-        var set = new java.util.LinkedHashSet<String>();
-        for (FileEntry e : entries) {
-            java.io.File f = new java.io.File(e.path());
-            java.io.File parent = e.isDirectory() ? f : f.getParentFile();
-            if (parent != null) set.add(parent.getAbsolutePath());
+        lock.readLock().lock();
+        try {
+            var set = new java.util.LinkedHashSet<String>();
+            for (FileEntry e : entries) {
+                java.io.File f = new java.io.File(e.path());
+                java.io.File parent = e.isDirectory() ? f : f.getParentFile();
+                if (parent != null) set.add(parent.getAbsolutePath());
+            }
+            return new ArrayList<>(set);
+        } finally {
+            lock.readLock().unlock();
         }
-        return new ArrayList<>(set);
     }
 }

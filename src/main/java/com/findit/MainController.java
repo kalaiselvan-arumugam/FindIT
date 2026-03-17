@@ -2,7 +2,6 @@ package com.findit;
 
 import com.findit.engine.*;
 import com.findit.model.FileEntry;
-import com.findit.persistence.IndexStore;
 import com.findit.ui.AppTheme;
 import com.findit.ui.SettingsController;
 import com.findit.util.GlobalHotkeyManager;
@@ -72,6 +71,7 @@ public class MainController {
     private GlobalHotkeyManager hotkeyManager;
 
     private static final Map<String, Image> ICON_CACHE = new ConcurrentHashMap<>();
+    private static final java.util.Set<String> ICON_LOADING = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     // ── Other refs ────────────────────────────────────────────────────────────
     private Stage primaryStage;
@@ -149,17 +149,22 @@ public class MainController {
                     setGraphic(imageView);
                 } else {
                     setGraphic(null);
-                    java.util.concurrent.CompletableFuture.supplyAsync(() -> getSystemIconFor(e))
-                        .thenAccept(icon -> javafx.application.Platform.runLater(() -> {
-                            int currentIdx = getIndex();
-                            if (getTableView() != null && currentIdx >= 0 && currentIdx < getTableView().getItems().size()
-                                    && getTableView().getItems().get(currentIdx) == e) {
-                                if (icon != null) {
-                                    imageView.setImage(icon);
-                                    setGraphic(imageView);
-                                }
-                            }
-                        }));
+                    if (ICON_LOADING.add(key)) { // Only one Task per extension at a time
+                        java.util.concurrent.CompletableFuture.supplyAsync(() -> getSystemIconFor(e))
+                            .thenAccept(icon -> {
+                                ICON_LOADING.remove(key);
+                                javafx.application.Platform.runLater(() -> {
+                                    int currentIdx = getIndex();
+                                    if (getTableView() != null && currentIdx >= 0 && currentIdx < getTableView().getItems().size()
+                                            && getTableView().getItems().get(currentIdx) == e) {
+                                        if (icon != null) {
+                                            imageView.setImage(icon);
+                                            setGraphic(imageView);
+                                        }
+                                    }
+                                });
+                            });
+                    }
                 }
 
                 setStyle(e.isDirectory() ? "-fx-text-fill: #dcdcaa;" : "");
@@ -210,16 +215,20 @@ public class MainController {
 
     private Image getSystemIconFor(FileEntry e) {
         String ext = getExtension(e.name());
-        String key = e.isDirectory() ? ":DIR:" : ext;
+        String key = e.isDirectory() ? ":DIR:" : (ext.isEmpty() ? ".tmp" : ext);
 
         return ICON_CACHE.computeIfAbsent(key, k -> {
             try {
                 File f;
                 if (e.isDirectory()) {
-                    f = new File(System.getProperty("java.io.tmpdir"));
+                    f = new File(System.getProperty("user.home"));
                 } else {
-                    f = File.createTempFile("icon", ext.isEmpty() ? ".tmp" : ext);
-                    f.deleteOnExit();
+                    // Reuse a single file per extension to avoid thousands of disk writes
+                    f = new File(System.getProperty("java.io.tmpdir"), "findit_icon_ref" + key);
+                    if (!f.exists()) {
+                        f.createNewFile();
+                        f.deleteOnExit();
+                    }
                 }
 
                 Icon swingIcon = FileSystemView.getFileSystemView().getSystemIcon(f);
@@ -294,11 +303,10 @@ public class MainController {
 
     private void runSearch() {
         String query = searchField.getText();
-        if (query.isBlank()) return; // Already cleared by listener
-        
-        long t0 = System.currentTimeMillis();
+        if (query.isBlank()) return;
+
         int limit = Math.min(5000, Settings.get().maxResults());
-        
+
         searchEngine.search(
                 query,
                 matchCaseBtn.isSelected(),
@@ -306,10 +314,10 @@ public class MainController {
                 matchPathBtn.isSelected(),
                 regexBtn.isSelected(),
                 limit,
-                found -> Platform.runLater(() -> {
-                    long t1 = System.currentTimeMillis();
+                (found, duration) -> Platform.runLater(() -> {
                     results.setAll(found);
-                    resultCountLabel.setText(String.format("%,d result%s (%,d ms)", found.size(), found.size() == 1 ? "" : "s", (t1 - t0))
+                    resultCountLabel.setText(String.format("%,d result%s (%,d ms)",
+                            found.size(), found.size() == 1 ? "" : "s", duration)
                             + (found.size() >= limit ? " (capped)" : ""));
                 }));
     }

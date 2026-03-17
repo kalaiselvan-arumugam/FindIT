@@ -3,12 +3,14 @@ package com.findit.engine;
 import com.findit.model.FileEntry;
 import com.findit.util.SearchQuery;
 import com.findit.util.WildcardMatcher;
+import javafx.application.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -23,44 +25,97 @@ public class SearchEngine {
     private static final String REGEX_PREFIX = "re:";
 
     private final FileIndex fileIndex;
-    private final ExecutorService executor = Executors.newCachedThreadPool(r -> {
+
+    // Single-thread executor — searches are sequential, no need for a pool.
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "findit-search");
         t.setDaemon(true);
         return t;
     });
+
     private Future<?> inFlight;
-    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+    /**
+     * Generation counter replaces AtomicBoolean cancelled.
+     * Incrementing before each search makes stale callbacks identify themselves
+     * and self-discard without a race window.
+     */
+    private final AtomicLong generation = new AtomicLong(0);
 
     public SearchEngine(FileIndex fileIndex) { this.fileIndex = fileIndex; }
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**
-     * Submit an async search. The result is delivered via {@code onResult} on
-     * the calling thread (wrap in Platform.runLater from the caller).
+     * Submit an async search.
+     * Results are delivered via two Platform.runLater calls:
+     *   1. A preview of the first 20 matches (instant feedback to the user).
+     *   2. The complete result list once the full scan finishes.
+     * If a newer search supersedes this one, neither callback fires.
      */
     public void search(String rawQuery, boolean matchCase, boolean wholeWord,
                        boolean matchPath, boolean regexMode, int maxResults,
-                       java.util.function.Consumer<List<FileEntry>> onResult) {
-        // Cancel previous search
-        if (inFlight != null && !inFlight.isDone()) {
-            cancelled.set(true);
-            inFlight.cancel(true);
-        }
-        cancelled.set(false);
+                       BiConsumer<List<FileEntry>, Long> onResult) {
+
+        if (inFlight != null && !inFlight.isDone()) inFlight.cancel(true);
+        final long myGen = generation.incrementAndGet();
 
         SearchQuery query = parseQuery(rawQuery, matchCase, wholeWord, matchPath, regexMode);
+
         inFlight = executor.submit(() -> {
+            long startTime = System.currentTimeMillis();
             try {
-                List<FileEntry> results = execute(query, maxResults);
-                if (!cancelled.get()) onResult.accept(results);
+                List<CompiledTerm> compiledExcludes = query.excludes().stream()
+                        .map(t -> new CompiledTerm(t, query)).toList();
+                List<List<CompiledTerm>> compiledOrGroups = query.orGroups().stream()
+                        .map(g -> g.stream().map(t -> new CompiledTerm(t, query)).toList())
+                        .toList();
+
+                if (query.isEmpty()) {
+                    if (generation.get() == myGen) {
+                        long duration = System.currentTimeMillis() - startTime;
+                        Platform.runLater(() -> onResult.accept(List.of(), duration));
+                    }
+                    return;
+                }
+
+                // Take a plain-array snapshot once — avoids lock contention inside the stream
+                FileEntry[] snapshot = fileIndex.snapshot();
+
+                List<FileEntry> results = new ArrayList<>(Math.min(1000, snapshot.length / 100 + 1));
+                boolean previewSent = false;
+
+                for (FileEntry entry : snapshot) {
+                    if (Thread.currentThread().isInterrupted() || generation.get() != myGen) break;
+                    if (matches(entry, query, compiledExcludes, compiledOrGroups)) {
+                        results.add(entry);
+                        // Deliver first 20 results immediately so the UI is not blank
+                        if (!previewSent && results.size() == 20) {
+                            final List<FileEntry> preview = new ArrayList<>(results);
+                            if (generation.get() == myGen) {
+                                long duration = System.currentTimeMillis() - startTime;
+                                Platform.runLater(() -> onResult.accept(preview, duration));
+                            }
+                            previewSent = true;
+                        }
+                        if (results.size() >= maxResults) break;
+                    }
+                }
+
+                // Deliver full results
+                if (generation.get() == myGen) {
+                    final List<FileEntry> full = results;
+                    long duration = System.currentTimeMillis() - startTime;
+                    Platform.runLater(() -> onResult.accept(full, duration));
+                }
+
             } catch (Exception e) {
-                if (!cancelled.get()) LOG.warn("Search error: {}", e.getMessage());
+                if (generation.get() == myGen) LOG.warn("Search error: {}", e.getMessage());
             }
         });
     }
 
-    // ── Query Parsing ─────────────────────────────────────────────────────────
+    // ── Query Parsing (unchanged) ─────────────────────────────────────────────
 
     public SearchQuery parseQuery(String raw, boolean matchCase, boolean wholeWord,
                                   boolean matchPath, boolean regexMode) {
@@ -69,7 +124,6 @@ public class SearchEngine {
 
         List<String> tokens = tokenize(raw);
 
-        // Split tokens into OR groups (separated by "|" tokens)
         List<List<String>> orGroups = new ArrayList<>();
         List<String> currentGroup = new ArrayList<>();
         for (String tok : tokens) {
@@ -81,7 +135,6 @@ public class SearchEngine {
         }
         if (!currentGroup.isEmpty()) orGroups.add(currentGroup);
 
-        // Extract global excludes (start with '!')
         List<String> excludes = new ArrayList<>();
         for (List<String> group : orGroups) {
             group.removeIf(t -> { if (t.startsWith("!")) { excludes.add(t.substring(1)); return true; } return false; });
@@ -91,7 +144,6 @@ public class SearchEngine {
         return new SearchQuery(orGroups, excludes, matchCase, wholeWord, matchPath, regexMode);
     }
 
-    /** Tokenizes respecting "quoted strings" and treating '|' as a separator token. */
     private List<String> tokenize(String s) {
         List<String> tokens = new ArrayList<>();
         StringBuilder cur = new StringBuilder();
@@ -112,29 +164,9 @@ public class SearchEngine {
 
     // ── Search Execution ──────────────────────────────────────────────────────
 
-    private List<FileEntry> execute(SearchQuery query, int maxResults) {
-        if (query.isEmpty()) return List.of();
-
-        List<CompiledTerm> compiledExcludes = query.excludes().stream()
-                .map(t -> new CompiledTerm(t, query)).toList();
-        List<List<CompiledTerm>> compiledOrGroups = query.orGroups().stream()
-                .map(g -> g.stream().map(t -> new CompiledTerm(t, query)).toList())
-                .toList();
-
-        List<FileEntry> all = fileIndex.getAll();
-        List<FileEntry> results = new ArrayList<>(Math.min(1000, all.size() / 10 + 1));
-
-        for (FileEntry entry : all) {
-            if (Thread.currentThread().isInterrupted() || cancelled.get()) break;
-            if (matches(entry, query, compiledExcludes, compiledOrGroups)) {
-                results.add(entry);
-                if (results.size() >= maxResults) break;
-            }
-        }
-        return results;
-    }
-
-    private boolean matches(FileEntry entry, SearchQuery query, List<CompiledTerm> excludes, List<List<CompiledTerm>> orGroups) {
+    private boolean matches(FileEntry entry, SearchQuery query,
+                            List<CompiledTerm> excludes,
+                            List<List<CompiledTerm>> orGroups) {
         String target = query.matchPath() ? entry.path() : entry.name();
 
         for (CompiledTerm ex : excludes) {
@@ -155,39 +187,49 @@ public class SearchEngine {
         return true;
     }
 
-    private static class CompiledTerm {
+    // ── CompiledTerm (unchanged except regexError field for future UI use) ────
+
+    static class CompiledTerm {
         final Pattern pattern;
+        final boolean isWildcard;
         final boolean wholeWord;
         final boolean matchCase;
         final String raw;
+        /** Non-null when the user typed an invalid regex (re: prefix). */
+        final String regexError;
 
         CompiledTerm(String raw, SearchQuery context) {
             this.raw = raw;
             this.wholeWord = context.wholeWord();
             this.matchCase = context.matchCase();
+            Pattern pc = null;
+            boolean wildcard = false;
+            String err = null;
             if (raw.startsWith(REGEX_PREFIX) || context.regexMode()) {
                 String p = raw.startsWith(REGEX_PREFIX) ? raw.substring(REGEX_PREFIX.length()) : raw;
                 int flags = context.matchCase() ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
-                Pattern pc = null;
-                try { pc = Pattern.compile(p, flags); } catch (PatternSyntaxException ignored) {}
-                this.pattern = pc;
+                try { pc = Pattern.compile(p, flags); }
+                catch (PatternSyntaxException e) { err = e.getDescription(); }
             } else if (WildcardMatcher.isWildcard(raw)) {
-                this.pattern = WildcardMatcher.toPattern(raw, context.matchCase());
-            } else {
-                this.pattern = null;
+                pc = WildcardMatcher.toPattern(raw, context.matchCase());
+                wildcard = true;
             }
+            this.pattern = pc;
+            this.isWildcard = wildcard;
+            this.regexError = err;
         }
 
         boolean matches(String target) {
             if (pattern != null) {
-                return pattern.matcher(target).find();
+                // Wildcard patterns must match the whole string (shell glob semantics).
+                // Regex (re:) patterns use find() so they can match substrings.
+                return isWildcard ? pattern.matcher(target).matches()
+                                  : pattern.matcher(target).find();
             }
             if (matchCase) {
-                if (wholeWord) return containsWholeWordExact(target, raw);
-                return target.contains(raw);
+                return wholeWord ? containsWholeWordExact(target, raw) : target.contains(raw);
             } else {
-                if (wholeWord) return containsWholeWordIgnoreCase(target, raw);
-                return containsIgnoreCase(target, raw);
+                return wholeWord ? containsWholeWordIgnoreCase(target, raw) : containsIgnoreCase(target, raw);
             }
         }
 
