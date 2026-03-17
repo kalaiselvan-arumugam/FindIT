@@ -1,0 +1,24 @@
+/* FindIT — Light Theme */
+.root {
+    -fx-base: #f5f5f5;
+    -fx-background: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-fill: #1e1e1e;
+    -fx-accent: #0078d4;
+}
+.search-container { -fx-background-color: #f0f0f0; -fx-padding: 10 14; }
+.search-field { -fx-background-color: #ffffff; -fx-text-fill: #1e1e1e; -fx-prompt-text-fill: #aaaaaa; -fx-border-color: #0078d4; -fx-border-radius: 4; -fx-background-radius: 4; -fx-font-size: 15px; -fx-padding: 8 36 8 12; }
+.tool-bar { -fx-background-color: #e8e8e8; -fx-padding: 4 14; }
+.toggle-button { -fx-background-color: transparent; -fx-text-fill: #444444; -fx-border-color: #cccccc; -fx-border-radius: 3; -fx-background-radius: 3; -fx-padding: 3 8; }
+.toggle-button:selected { -fx-background-color: #cce4ff; -fx-border-color: #0078d4; }
+.reindex-btn { -fx-background-color: #0078d4; -fx-text-fill: #ffffff; -fx-border-radius: 3; -fx-background-radius: 3; -fx-padding: 4 10; }
+.table-view { -fx-background-color: #ffffff; -fx-border-color: #e0e0e0; }
+.table-view .column-header { -fx-background-color: #f0f0f0; }
+.table-view .column-header .label { -fx-text-fill: #444444; }
+.table-row-cell:odd  { -fx-background-color: #fafafa; }
+.table-row-cell:even { -fx-background-color: #ffffff; }
+.table-row-cell:selected { -fx-background-color: #cce4ff; }
+.table-row-cell:hover { -fx-background-color: #e8f4ff; }
+.table-cell { -fx-text-fill: #1e1e1e; }
+.status-bar { -fx-background-color: #0078d4; -fx-padding: 4 16; }
+.status-bar .label { -fx-text-fill: #ffffff; }

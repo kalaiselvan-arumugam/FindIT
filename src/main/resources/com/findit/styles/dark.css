@@ -1,0 +1,180 @@
+/* ============================================================
+   FindIT — Dark Theme (VS Code / JetBrains inspired)
+   ============================================================ */
+
+* {
+    -fx-font-family: 'Segoe UI', 'Inter', Arial, sans-serif;
+}
+
+.root {
+    -fx-base:                    #1e1e1e;
+    -fx-background:              #1e1e1e;
+    -fx-control-inner-background: #2d2d2d;
+    -fx-text-fill:               #d4d4d4;
+    -fx-accent:                  #007acc;
+}
+
+/* ── Search Bar ───────────────────────────────────────────── */
+.search-container {
+    -fx-background-color: #252526;
+    -fx-padding: 10 14 10 14;
+}
+
+.search-field {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #d4d4d4;
+    -fx-prompt-text-fill: #888888;
+    -fx-border-color: #007acc;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-font-size: 15px;
+    -fx-padding: 8 36 8 12;
+}
+
+.search-field:focused {
+    -fx-border-color: #4fc3f7;
+    -fx-effect: dropshadow(gaussian, rgba(0,122,204,0.5), 8, 0, 0, 0);
+}
+
+.clear-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #888888;
+    -fx-font-size: 14px;
+    -fx-cursor: hand;
+    -fx-padding: 4 8 4 8;
+}
+.clear-btn:hover { -fx-text-fill: #d4d4d4; }
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+.tool-bar {
+    -fx-background-color: #333333;
+    -fx-padding: 4 14;
+    -fx-spacing: 6;
+}
+
+.toggle-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cccccc;
+    -fx-border-color: #555555;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 3 8;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+}
+.toggle-button:hover { -fx-background-color: #444444; }
+.toggle-button:selected {
+    -fx-background-color: #094771;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #007acc;
+}
+
+.reindex-btn {
+    -fx-background-color: #0e639c;
+    -fx-text-fill: #ffffff;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 4 10;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+}
+.reindex-btn:hover { -fx-background-color: #1177bb; }
+.reindex-btn:pressed { -fx-background-color: #094771; }
+
+.options-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cccccc;
+    -fx-border-color: transparent;
+    -fx-cursor: hand;
+    -fx-font-size: 13px;
+}
+.options-btn:hover { -fx-text-fill: #ffffff; }
+
+/* ── Table ────────────────────────────────────────────────── */
+.table-view {
+    -fx-background-color: #1e1e1e;
+    -fx-border-color: #333333;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: #252526;
+}
+.table-view .column-header {
+    -fx-background-color: #333333;
+    -fx-size: 28;
+}
+.table-view .column-header .label {
+    -fx-text-fill: #bbbbbb;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 8;
+}
+
+.table-row-cell {
+    -fx-border-color: transparent;
+    -fx-table-cell-border-color: transparent;
+    -fx-font-size: 13px;
+}
+.table-row-cell:odd  { -fx-background-color: #252526; }
+.table-row-cell:even { -fx-background-color: #1e1e1e; }
+.table-row-cell:selected { -fx-background-color: #094771; }
+.table-row-cell:hover { -fx-background-color: #2a2d2e; }
+.table-row-cell:selected:hover { -fx-background-color: #0a5580; }
+
+.table-cell { -fx-text-fill: #d4d4d4; -fx-padding: 5 8; }
+.table-row-cell:selected .table-cell { -fx-text-fill: #ffffff; }
+
+.path-cell { -fx-text-fill: #9cdcfe; }
+.size-cell  { -fx-text-fill: #ce9178; -fx-alignment: CENTER_RIGHT; }
+.date-cell  { -fx-text-fill: #b5cea8; }
+.dir-name-cell { -fx-text-fill: #dcdcaa; }
+
+.table-placeholder { -fx-text-fill: #555555; -fx-font-size: 14px; }
+
+/* ── Scroll Bar ───────────────────────────────────────────── */
+.scroll-bar { -fx-background-color: #1e1e1e; }
+.scroll-bar .thumb { -fx-background-color: #424242; -fx-background-radius: 4; }
+.scroll-bar .thumb:hover { -fx-background-color: #555555; }
+.scroll-bar .track { -fx-background-color: #1e1e1e; }
+.scroll-bar .increment-button, .scroll-bar .decrement-button { -fx-background-color: transparent; -fx-padding: 2; }
+.scroll-bar .increment-arrow, .scroll-bar .decrement-arrow { -fx-background-color: #555555; }
+
+/* ── Status Bar ───────────────────────────────────────────── */
+.status-bar {
+    -fx-background-color: #007acc;
+    -fx-padding: 4 16;
+    -fx-spacing: 12;
+}
+.status-bar .label {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 12px;
+}
+.status-separator {
+    -fx-background-color: rgba(255,255,255,0.3);
+    -fx-pref-width: 1;
+    -fx-pref-height: 14;
+}
+
+/* ── Context Menu ─────────────────────────────────────────── */
+.context-menu {
+    -fx-background-color: #252526;
+    -fx-border-color: #454545;
+    -fx-border-radius: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 10, 0, 0, 4);
+}
+.menu-item { -fx-background-color: transparent; }
+.menu-item .label { -fx-text-fill: #cccccc; -fx-font-size: 13px; }
+.menu-item:focused { -fx-background-color: #094771; }
+.menu-item:focused .label { -fx-text-fill: #ffffff; }
+
+/* ── Separator ────────────────────────────────────────────── */
+.separator { -fx-background-color: #454545; }
+.tool-bar .separator { -fx-background-color: #555555; -fx-pref-width: 1; }
+
+/* ── Tooltip ──────────────────────────────────────────────── */
+.tooltip {
+    -fx-background-color: #252526;
+    -fx-text-fill: #cccccc;
+    -fx-border-color: #454545;
+    -fx-font-size: 12px;
+}
