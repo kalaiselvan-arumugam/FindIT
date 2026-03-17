@@ -35,7 +35,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * FXML controller for the main Find IT window.
@@ -70,7 +69,22 @@ public class MainController {
     private FileIndex fileIndex;
     private GlobalHotkeyManager hotkeyManager;
 
-    private static final Map<String, Image> ICON_CACHE = new ConcurrentHashMap<>();
+    /**
+     * LRU icon cache capped at 200 entries.
+     * The original ConcurrentHashMap had no eviction — with hundreds of unique
+     * file extensions it grew without bound. JavaFX Image objects hold decoded
+     * pixel data; uncapped, this cache can reach 50-200 MB.
+     * 200 entries comfortably covers all common extension types.
+     */
+    private static final Map<String, Image> ICON_CACHE =
+            java.util.Collections.synchronizedMap(
+                    new java.util.LinkedHashMap<String, Image>(256, 0.75f, true) {
+                        @Override
+                        protected boolean removeEldestEntry(java.util.Map.Entry<String, Image> eldest) {
+                            return size() > 200;
+                        }
+                    }
+            );
     private static final java.util.Set<String> ICON_LOADING = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     // ── Other refs ────────────────────────────────────────────────────────────

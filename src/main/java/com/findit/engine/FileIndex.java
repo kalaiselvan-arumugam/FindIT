@@ -9,8 +9,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Thread-safe in-memory store of indexed {@link FileEntry} objects.
- * Backed by {@link CopyOnWriteArrayList} so the watcher thread can mutate
- * the list while search reads a stable snapshot.
  */
 public class FileIndex {
 

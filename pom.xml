@@ -91,6 +91,18 @@
             <option>--add-modules=javafx.controls,javafx.fxml</option>
             <option>--add-opens=javafx.fxml/javafx.fxml=ALL-UNNAMED</option>
             <option>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</option>
+            <!-- Hard cap heap so JVM does not pre-reserve 25% of system RAM -->
+            <option>-Xmx512m</option>
+            <!-- Start with small heap and grow only as needed -->
+            <option>-Xms128m</option>
+            <!-- G1GC is better than default GC for large heaps with mixed object sizes -->
+            <option>-XX:+UseG1GC</option>
+            <!-- Keep GC pauses short so the UI stays responsive -->
+            <option>-XX:MaxGCPauseMillis=100</option>
+            <!-- JVM will merge identical String contents across objects (path deduplication) -->
+            <option>-XX:+UseStringDeduplication</option>
+            <!-- Return unused heap memory to the OS promptly -->
+            <option>-XX:+G1PeriodicGCInterval=10000</option>
           </options>
         </configuration>
       </plugin>
@@ -101,6 +113,23 @@
         <version>3.1.2</version>
         <configuration>
           <useModulePath>false</useModulePath>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.3.0</version>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>com.findit.Launcher</mainClass>
+            </manifest>
+            <manifestEntries>
+              <!-- Embed JVM flags for direct JAR execution -->
+              <JVM-Options>-Xmx512m -Xms128m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseStringDeduplication</JVM-Options>
+            </manifestEntries>
+          </archive>
         </configuration>
       </plugin>
     </plugins>

@@ -138,15 +138,6 @@ public class IndexStore {
         }
     }
 
-    public synchronized long count() {
-        try (Statement s = conn.createStatement();
-             ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM file_index")) {
-            return rs.next() ? rs.getLong(1) : 0;
-        } catch (SQLException e) {
-            return 0;
-        }
-    }
-
     /** Call on application exit to cleanly close the shared connection. */
     public synchronized void close() {
         try { if (conn != null && !conn.isClosed()) conn.close(); }

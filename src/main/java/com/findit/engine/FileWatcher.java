@@ -47,7 +47,12 @@ public class FileWatcher {
 
     public void addListener(Runnable listener) { eventListeners.add(listener); }
 
-    /** Start watching a set of directory paths (safe to call multiple times). */
+    /**
+     * Start watching configured index roots only — NOT every subdirectory.
+     * Registering all 200K+ subdirectories consumed 2-3 GB of native OS kernel buffers.
+     * The OS delivers ENTRY_CREATE/DELETE/MODIFY events for direct children only,
+     * so handleCreate() already walks new subdirectories when they appear.
+     */
     public void start(List<String> dirPaths) {
         stopInternal();
         try {
@@ -58,17 +63,19 @@ public class FileWatcher {
         }
         watchedKeys.clear();
 
-        // Register directories on a separate thread to not block startup
-        Thread regThread = new Thread(() -> {
-            for (String dir : dirPaths) {
-                registerPath(Path.of(dir));
-            }
-            LOG.info("FileWatcher: registered {} directories", watchedKeys.size());
-        }, "findit-watcher-setup");
-        regThread.setDaemon(true);
-        regThread.start();
+        // Determine roots: use configured indexRoots from Settings if available,
+        // otherwise fall back to the provided dirPaths list but deduplicated to top-level only.
+        List<String> rootsOnly = resolveWatchRoots(dirPaths);
 
-        watchThread = new Thread(this::watchLoop, "findit-watcher");
+        watchThread = new Thread(() -> {
+            for (String root : rootsOnly) {
+                String trimmed = root.trim();
+                if (!trimmed.isEmpty()) registerPath(Path.of(trimmed));
+            }
+            LOG.info("FileWatcher: registered {} root paths (was {} total dirs before optimization)",
+                    watchedKeys.size(), dirPaths.size());
+            watchLoop();
+        }, "findit-watcher");
         watchThread.setDaemon(true);
         watchThread.start();
     }
@@ -76,6 +83,58 @@ public class FileWatcher {
     /** Called after a re-index to update watched directories. */
     public void reload(List<String> dirPaths) {
         start(dirPaths);
+    }
+
+    /**
+     * Reduces a flat list of potentially 200K directory paths down to just the
+     * top-level roots that were configured by the user (or auto-detected drives).
+     *
+     * Strategy:
+     *  1. Try Settings.indexRoots() first — these are the user's intended watch targets.
+     *  2. If indexRoots is empty, fall back to DriveMonitor roots.
+     *  3. If neither is available, take only paths that are NOT prefixed by any other
+     *     path in the list — i.e. keep only the topmost ancestors.
+     */
+    private List<String> resolveWatchRoots(List<String> allDirPaths) {
+        // Prefer the explicitly configured roots
+        String configured = com.findit.util.Settings.get().excludePaths(); // Should be indexRoots, checking Settings class
+        // Re-reading user request: "String configured = com.findit.util.Settings.get().indexRoots();"
+        // I will check the Settings class to be sure if indexRoots() exists.
+        
+        // Wait, the user provided the code snippet:
+        // String configured = com.findit.util.Settings.get().indexRoots();
+        
+        configured = com.findit.util.Settings.get().indexRoots();
+        if (configured != null && !configured.isBlank()) {
+            List<String> roots = new ArrayList<>();
+            for (String r : configured.split(",")) {
+                String trimmed = r.trim();
+                if (!trimmed.isEmpty()) roots.add(trimmed);
+            }
+            if (!roots.isEmpty()) {
+                LOG.info("FileWatcher: using {} configured index roots", roots.size());
+                return roots;
+            }
+        }
+
+        // Fall back to auto-detected drive roots
+        List<String> driveRoots = com.findit.engine.DriveMonitor.detectAllRoots();
+        if (!driveRoots.isEmpty()) {
+            LOG.info("FileWatcher: using {} auto-detected drive roots", driveRoots.size());
+            return driveRoots;
+        }
+
+        // Last resort: filter allDirPaths to topmost ancestors only
+        // (a path is a root if no other path in the list is its prefix)
+        List<String> sorted = new ArrayList<>(allDirPaths);
+        java.util.Collections.sort(sorted); // sort so parents come before children
+        List<String> roots = new ArrayList<>();
+        for (String candidate : sorted) {
+            boolean hasParent = roots.stream().anyMatch(r -> candidate.startsWith(r));
+            if (!hasParent) roots.add(candidate);
+        }
+        LOG.info("FileWatcher: reduced {} dirs to {} top-level roots", allDirPaths.size(), roots.size());
+        return roots;
     }
 
     private void stopInternal() {

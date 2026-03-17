@@ -61,14 +61,7 @@ class IndexStoreTest {
         assertEquals("b.txt", loaded.get(0).name());
     }
 
-    @Test void countReflectsEntries() {
-        store.save(List.of(
-                new FileEntry("x.txt", "/x.txt", 10, 100L, false),
-                new FileEntry("y.txt", "/y.txt", 20, 200L, false),
-                new FileEntry("z.txt", "/z.txt", 30, 300L, false)
-        ));
-        assertEquals(3, store.count());
-    }
+
 
     @Test void loadEmptyReturnsEmptyList() {
         List<FileEntry> loaded = store.load();

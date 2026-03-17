@@ -34,13 +34,6 @@ public final class WildcardMatcher {
         return Pattern.compile(regex.toString(), flags);
     }
 
-    /**
-     * Returns true if the subject matches the wildcard pattern.
-     */
-    public static boolean matches(String wildcard, String subject, boolean caseSensitive) {
-        return toPattern(wildcard, caseSensitive).matcher(subject).matches();
-    }
-
     /** Returns true if the string contains any wildcard character (* or ?). */
     public static boolean isWildcard(String s) {
         return s.contains("*") || s.contains("?");

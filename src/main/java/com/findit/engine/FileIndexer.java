@@ -74,7 +74,12 @@ public class FileIndexer {
         indexing.set(true);
         LOG.info("Starting full indexing...");
 
-        List<FileEntry> newIndex = new ArrayList<>();
+        // Release the old index before walking — prevents triple-buffering peak
+        fileIndex.clear();
+        System.gc();
+
+        // Pre-sized to slightly over last known count — eliminates ArrayList resizing copies
+        List<FileEntry>[] newIndexWrapper = new List[]{ new ArrayList<>(Math.max(1_300_000, fileIndex.size() + 100_000)) };
         AtomicLong count = new AtomicLong();
         List<String> excludePaths = parseExcludes();
 
@@ -96,9 +101,9 @@ public class FileIndexer {
                         for (String ex : excludePaths) {
                             if (abs.startsWith(ex)) return FileVisitResult.SKIP_SUBTREE;
                         }
-                        newIndex.add(new FileEntry(
+                        newIndexWrapper[0].add(new FileEntry(
                                 dir.getFileName() != null ? dir.getFileName().toString() : abs,
-                                abs, -1L, attrs.lastModifiedTime().toMillis(), true));
+                                abs.intern(), -1L, attrs.lastModifiedTime().toMillis(), true));
                         long n = count.incrementAndGet();
                         if (n % PROGRESS_INTERVAL == 0) {
                             if (progressListener != null) progressListener.accept(n);
@@ -116,9 +121,9 @@ public class FileIndexer {
                     @Override
                     public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                         if (Thread.currentThread().isInterrupted()) return FileVisitResult.TERMINATE;
-                        newIndex.add(new FileEntry(
+                        newIndexWrapper[0].add(new FileEntry(
                                 file.getFileName().toString(),
-                                file.toAbsolutePath().toString(),
+                                file.toAbsolutePath().toString().intern(),
                                 attrs.size(),
                                 attrs.lastModifiedTime().toMillis(),
                                 false));
@@ -139,12 +144,16 @@ public class FileIndexer {
             }
         }
 
-        LOG.info("Indexing complete: {} entries", newIndex.size());
-        fileIndex.setAll(newIndex);
+        LOG.info("Indexing complete: {} entries", newIndexWrapper[0].size());
+        fileIndex.setAll(newIndexWrapper[0]);
         indexing.set(false);
 
-        // Persist and notify
-        indexStore.save(newIndex);
+        // Explicitly null the local reference so GC can collect the ArrayList
+        // wrapper before the save starts — only fileIndex holds entries now
+        List<FileEntry> toSave = newIndexWrapper[0];
+        newIndexWrapper[0] = null;
+        indexStore.save(toSave);
+        toSave = null;
 
         // (Re)start watcher now that directories are indexed
         if (Settings.get().watcherEnabled()) {
