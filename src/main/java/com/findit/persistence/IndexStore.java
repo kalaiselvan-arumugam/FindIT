@@ -35,10 +35,15 @@ public class IndexStore {
     private final Connection conn;
 
     public IndexStore() {
+        this(JDBC_URL);
         new File(DB_DIR).mkdirs();
+    }
+
+    /** Public constructor for unit testing with a temp DB. */
+    public IndexStore(String jdbcUrl) {
         Connection c = null;
         try {
-            c = DriverManager.getConnection(JDBC_URL);
+            c = DriverManager.getConnection(jdbcUrl);
             try (Statement s = c.createStatement()) {
                 // WAL mode: readers never block writers, writers never block readers
                 s.execute("PRAGMA journal_mode=WAL");

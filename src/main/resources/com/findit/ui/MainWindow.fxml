@@ -7,73 +7,82 @@
 <VBox xmlns="http://javafx.com/javafx/21"
       xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="com.findit.MainController"
-      prefWidth="1200" prefHeight="720"
+      prefWidth="1100" prefHeight="680"
       styleClass="root">
 
-    <!-- ── Search Bar ──────────────────────────────── -->
-    <HBox styleClass="search-container" alignment="CENTER_LEFT" spacing="8">
-        <TextField fx:id="searchField"
-                   styleClass="search-field"
-                   promptText="Search files and folders..."
-                   HBox.hgrow="ALWAYS"/>
-        <Button fx:id="clearBtn" styleClass="clear-btn" text="✕"
-                visible="false" managed="false"
-                focusTraversable="false"/>
+    <!-- ── Custom Title Bar (frameless) ──────── -->
+    <HBox fx:id="titleBar" styleClass="title-bar" alignment="CENTER_LEFT">
+        <Label text="FindIT" styleClass="title-bar-icon"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button fx:id="minimizeBtn" styleClass="wc-btn" text="&#x2212;"
+                focusTraversable="false" minWidth="46"/>
+        <Button fx:id="maximizeBtn" styleClass="wc-btn" text="&#x25A1;"
+                focusTraversable="false" minWidth="46"/>
+        <Button fx:id="closeBtn"    styleClass="wc-btn, wc-btn-close" text="&#x2715;"
+                focusTraversable="false" minWidth="46"/>
     </HBox>
 
-    <!-- ── Toolbar ────────────────────────────────── -->
-    <ToolBar styleClass="tool-bar">
-        <ToggleButton fx:id="matchCaseBtn" styleClass="toggle-button"
-                      text="Aa" focusTraversable="false">
-            <tooltip><Tooltip text="Match Case (Alt+C)"/></tooltip>
+    <!-- ── Search Bar ──────────────────────── -->
+    <HBox styleClass="search-container" alignment="CENTER_LEFT" spacing="0">
+        <Label text="&#x2315;" styleClass="search-icon-label"/>
+        <TextField fx:id="searchField"
+                   styleClass="search-field"
+                   promptText="Search files and folders…  (ext:pdf  size:&gt;5mb  path:D:/docs)"
+                   HBox.hgrow="ALWAYS"/>
+        <Button fx:id="clearBtn" styleClass="clear-btn" text="&#x2715;"
+                visible="false" managed="false" focusTraversable="false"/>
+    </HBox>
+
+    <!-- ── Toolbar ──────────────────────────── -->
+    <HBox styleClass="tool-bar" alignment="CENTER_LEFT" spacing="6">
+        <ToggleButton fx:id="matchCaseBtn" styleClass="toggle-button" text="Aa" focusTraversable="false">
+            <tooltip><Tooltip text="Match Case  (Alt+C)"/></tooltip>
         </ToggleButton>
-        <ToggleButton fx:id="wholeWordBtn" styleClass="toggle-button"
-                      text="W" focusTraversable="false">
-            <tooltip><Tooltip text="Match Whole Word (Alt+W)"/></tooltip>
+        <ToggleButton fx:id="wholeWordBtn" styleClass="toggle-button" text="W" focusTraversable="false">
+            <tooltip><Tooltip text="Whole Word  (Alt+W)"/></tooltip>
         </ToggleButton>
-        <ToggleButton fx:id="matchPathBtn" styleClass="toggle-button"
-                      text="Path" focusTraversable="false">
-            <tooltip><Tooltip text="Search in Full Path (Alt+P)"/></tooltip>
+        <ToggleButton fx:id="matchPathBtn" styleClass="toggle-button" text="Path" focusTraversable="false">
+            <tooltip><Tooltip text="Search in Full Path  (Alt+P)"/></tooltip>
         </ToggleButton>
-        <ToggleButton fx:id="regexBtn" styleClass="toggle-button"
-                      text=".*" focusTraversable="false">
-            <tooltip><Tooltip text="Regular Expression Mode (Alt+R)"/></tooltip>
+        <ToggleButton fx:id="regexBtn" styleClass="toggle-button" text=".*" focusTraversable="false">
+            <tooltip><Tooltip text="Regular Expression  (Alt+R)"/></tooltip>
         </ToggleButton>
-        <Separator orientation="VERTICAL"/>
-        <Button fx:id="reindexBtn" styleClass="reindex-btn" text="↺  Re-index"
-                focusTraversable="false">
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="indexingSpinner" text="&#x21BB;  Indexing&#x2026;" styleClass="spinner-label"
+               visible="false" managed="false"/>
+        <Button fx:id="reindexBtn" styleClass="reindex-btn" text="&#x21BA;  Re-index" focusTraversable="false">
             <tooltip><Tooltip text="Rebuild the file index from scratch"/></tooltip>
         </Button>
-        <Separator orientation="VERTICAL"/>
-        <Button fx:id="settingsBtn" styleClass="options-btn" text="⚙  Options"
-                focusTraversable="false"/>
-        <Region HBox.hgrow="ALWAYS"/>
-        <Label fx:id="indexingSpinner" text="⟳ Indexing..." styleClass="label"
-               visible="false" managed="false"
-               style="-fx-text-fill: #4fc3f7; -fx-font-size:12px;"/>
-    </ToolBar>
+        <Button fx:id="settingsBtn" styleClass="options-btn" text="&#x2699;" focusTraversable="false">
+            <tooltip><Tooltip text="Options"/></tooltip>
+        </Button>
+    </HBox>
 
-    <!-- ── Results Table ──────────────────────────── -->
-    <TableView fx:id="resultTable" VBox.vgrow="ALWAYS"
+    <!-- ── Results Table ─────────────────────── -->
+    <TableView fx:id="resultTable" VBox.vgrow="ALWAYS" styleClass="results-table"
                tableMenuButtonVisible="false">
         <columns>
-            <TableColumn fx:id="nameCol"  text="Name"          prefWidth="250" minWidth="100"/>
-            <TableColumn fx:id="pathCol"  text="Path"          prefWidth="550" minWidth="100"/>
+            <TableColumn fx:id="nameCol"  text="Name"          prefWidth="280" minWidth="100"/>
+            <TableColumn fx:id="pathCol"  text="Path"          prefWidth="540" minWidth="100"/>
             <TableColumn fx:id="sizeCol"  text="Size"          prefWidth="90"  minWidth="60" sortable="true"/>
-            <TableColumn fx:id="dateCol"  text="Date Modified" prefWidth="170" minWidth="120"/>
+            <TableColumn fx:id="dateCol"  text="Date Modified" prefWidth="165" minWidth="120"/>
         </columns>
         <placeholder>
-            <Label styleClass="table-placeholder"
-                   text="Type in the search box above to find files and folders."/>
+            <VBox alignment="CENTER" spacing="10">
+                <Label text="&#x2315;" style="-fx-font-size:36px; -fx-text-fill:#1a1a1a;"/>
+                <Label styleClass="table-placeholder" text="Type to search files and folders"/>
+                <Label styleClass="table-placeholder-hint" text="Tip: ext:pdf,docx   size:&gt;10mb   path:D:/docs"/>
+            </VBox>
         </placeholder>
     </TableView>
 
-    <!-- ── Status Bar ─────────────────────────────── -->
-    <HBox fx:id="statusBar" styleClass="status-bar" alignment="CENTER_LEFT" spacing="10">
-        <Label fx:id="indexCountLabel"  text="0 files indexed"/>
-        <Region  styleClass="status-separator" prefWidth="1" prefHeight="14"/>
-        <Label fx:id="resultCountLabel" text="0 results"/>
+    <!-- ── Status Bar ─────────────────────────── -->
+    <HBox fx:id="statusBar" styleClass="status-bar" alignment="CENTER_LEFT" spacing="12">
+        <Label fx:id="indexCountLabel"  text="0 files indexed" styleClass="status-label"/>
+        <Region styleClass="status-sep"/>
+        <Label fx:id="resultCountLabel" text="0 results"       styleClass="status-label"/>
         <Region HBox.hgrow="ALWAYS"/>
-        <Label fx:id="stateLabel"       text="Starting..."/>
+        <Label fx:id="stateLabel"       text="Starting&#x2026;" styleClass="status-label-dim"/>
     </HBox>
+
 </VBox>

@@ -73,6 +73,35 @@ class SearchEngineTest {
         assertEquals("budget.xlsx", r.get(0).name());
     }
 
+    @Test void extSearch() throws Exception {
+        var r1 = searchSync("ext:pdf", false, false, false, false);
+        assertEquals(1, r1.size());
+        assertEquals("report.pdf", r1.get(0).name());
+
+        var r2 = searchSync("ext:.xlsx", false, false, false, false);
+        assertEquals(1, r2.size());
+        assertEquals("budget.xlsx", r2.get(0).name());
+    }
+
+    @Test void multiExtSearch() throws Exception {
+        var r = searchSync("ext:pdf,xlsx,jpg", false, false, false, false);
+        assertEquals(3, r.size());
+    }
+
+    @Test void sizeSearch() throws Exception {
+        var r1 = searchSync("size:>1kb", false, false, false, false);
+        assertEquals(4, r1.size()); // report(1024), budget(2048), image(8192), logo(4096)
+
+        var r2 = searchSync("size:<2kb", false, false, false, false);
+        assertEquals(3, r2.size()); // temp_file(512), report(1024), budget(2048)
+    }
+
+    @Test void pathPrefixSearch() throws Exception {
+        var r = searchSync("path:docs", false, false, false, false);
+        // Note: matchPath flag is FALSE, but path: forces path matching
+        assertEquals(2, r.size()); // report.pdf, budget.xlsx
+    }
+
     @Test void caseInsensitiveByDefault() throws Exception {
         var r = searchSync("REPORT", false, false, false, false);
         assertEquals(1, r.size());

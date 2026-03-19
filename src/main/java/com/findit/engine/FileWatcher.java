@@ -47,6 +47,8 @@ public class FileWatcher {
 
     public void addListener(Runnable listener) { eventListeners.add(listener); }
 
+    private ScheduledExecutorService macLinuxScheduler;
+
     /**
      * Start watching configured index roots only — NOT every subdirectory.
      * Registering all 200K+ subdirectories consumed 2-3 GB of native OS kernel buffers.
@@ -78,6 +80,20 @@ public class FileWatcher {
         }, "findit-watcher");
         watchThread.setDaemon(true);
         watchThread.start();
+
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        if (!isWindows) {
+            LOG.info("FileWatcher: Non-Windows OS detected. Starting scheduled background re-indexing every 5 minutes.");
+            macLinuxScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "findit-maclinux-scheduler");
+                t.setDaemon(true);
+                return t;
+            });
+            macLinuxScheduler.scheduleWithFixedDelay(() -> {
+                LOG.info("Scheduled indexing trigger for Mac/Linux.");
+                if (fileIndexer != null) fileIndexer.reindex();
+            }, 5, 5, TimeUnit.MINUTES);
+        }
     }
 
     /** Called after a re-index to update watched directories. */
@@ -142,15 +158,33 @@ public class FileWatcher {
         if (watchService != null) {
             try { watchService.close(); } catch (IOException ignored) {}
         }
+        if (macLinuxScheduler != null) {
+            macLinuxScheduler.shutdownNow();
+            macLinuxScheduler = null;
+        }
     }
 
     private void registerPath(Path dir) {
         if (!Files.isDirectory(dir)) return;
         try {
-            WatchKey key = dir.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+            WatchKey key;
+            if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+                key = dir.register(watchService, 
+                        new WatchEvent.Kind[]{ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY}, 
+                        com.sun.nio.file.ExtendedWatchEventModifier.FILE_TREE);
+            } else {
+                key = dir.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+            }
             watchedKeys.put(key, dir);
         } catch (IOException e) {
             LOG.debug("Cannot watch {}: {}", dir, e.getMessage());
+        } catch (UnsupportedOperationException e) {
+            try {
+                WatchKey key = dir.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+                watchedKeys.put(key, dir);
+            } catch (IOException ex) {
+                LOG.debug("Cannot watch (fallback) {}: {}", dir, ex.getMessage());
+            }
         }
     }
 

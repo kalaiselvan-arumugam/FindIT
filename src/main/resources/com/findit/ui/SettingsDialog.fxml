@@ -2,105 +2,185 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.geometry.*?>
+<?import org.controlsfx.control.ToggleSwitch?>
 
-<VBox xmlns="http://javafx.com/javafx/21"
-      xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="com.findit.ui.SettingsController"
-      prefWidth="560" prefHeight="520"
-      spacing="0" styleClass="root">
+<!--
+  Settings dialog — Frameless, transparent + dropshadow, left-sidebar nav, real toggle switches
+-->
+<StackPane xmlns="http://javafx.com/javafx/21"
+           xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="com.findit.ui.SettingsController"
+           style="-fx-background-color: transparent;">
 
-    <!-- Header -->
-    <Label text="Options" style="-fx-font-size:18px; -fx-font-weight:bold; -fx-text-fill:#d4d4d4; -fx-padding: 16 20 8 20;"/>
+    <!-- Outer padding gives the drop-shadow room to breathe -->
+    <VBox prefWidth="720" minWidth="720" maxWidth="720"
+          prefHeight="500" minHeight="500" maxHeight="500"
+          spacing="0" styleClass="root"
+          style="-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.75), 28, 0, 0, 6); -fx-background-radius: 10;">
+        <StackPane.margin>
+            <javafx.geometry.Insets top="15" right="15" bottom="15" left="15"/>
+        </StackPane.margin>
 
-    <!-- Tabs -->
-    <TabPane fx:id="tabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE"
-             style="-fx-background-color:#1e1e1e; -fx-tab-min-width:90;">
+        <!-- ── Custom Title Bar ─────────────────────────── -->
+        <HBox fx:id="settingsTitleBar" styleClass="title-bar" alignment="CENTER_LEFT"
+              style="-fx-background-radius: 10 10 0 0;">
+            <Label text="Settings" styleClass="title-bar-icon"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button fx:id="settingsCloseBtn" styleClass="wc-btn, wc-btn-close" text="&#x2715;"
+                    focusTraversable="false" minWidth="46"
+                    style="-fx-background-radius: 0 10 0 0;"/>
+        </HBox>
 
-        <!-- ── General ── -->
-        <Tab text="General">
-            <ScrollPane fitToWidth="true" style="-fx-background-color:#1e1e1e; -fx-border-color: transparent;">
-                <VBox spacing="14" style="-fx-padding:20;">
+        <!-- ── Body: Left nav + Right content ──────────── -->
+        <HBox VBox.vgrow="ALWAYS">
 
-                    <Label text="Appearance" style="-fx-font-weight:bold; -fx-text-fill:#9cdcfe;"/>
-                    <HBox spacing="12" alignment="CENTER_LEFT">
-                        <Label text="Theme:" prefWidth="130" style="-fx-text-fill:#d4d4d4;"/>
-                        <ComboBox fx:id="themeCombo" prefWidth="160"/>
-                    </HBox>
-                    <CheckBox fx:id="showIconsCheck" text="Show file icons in results"
-                              style="-fx-text-fill:#d4d4d4;"/>
+            <!-- LEFT NAV -->
+            <VBox styleClass="settings-nav" prefWidth="185" minWidth="185" maxWidth="185">
+                <Button fx:id="navGeneral"    styleClass="settings-nav-item, settings-nav-active"
+                        text="   &#x2699;   General"
+                        maxWidth="Infinity" alignment="CENTER_LEFT" focusTraversable="false"/>
+                <Button fx:id="navExclusions" styleClass="settings-nav-item"
+                        text="   &#x26D4;   Exclusions"
+                        maxWidth="Infinity" alignment="CENTER_LEFT" focusTraversable="false"/>
+                <Button fx:id="navAbout"      styleClass="settings-nav-item"
+                        text="   &#x2139;   About"
+                        maxWidth="Infinity" alignment="CENTER_LEFT" focusTraversable="false"/>
+                <Region VBox.vgrow="ALWAYS"/>
+            </VBox>
 
-                    <Separator/>
-                    <Label text="Search" style="-fx-font-weight:bold; -fx-text-fill:#9cdcfe;"/>
-                    <HBox spacing="12" alignment="CENTER_LEFT">
-                        <Label text="Max Results:" prefWidth="130" style="-fx-text-fill:#d4d4d4;"/>
-                        <TextField fx:id="maxResultsField" prefWidth="120"/>
-                    </HBox>
-                    <HBox spacing="12" alignment="CENTER_LEFT">
-                        <Label text="Debounce (ms):" prefWidth="130" style="-fx-text-fill:#d4d4d4;"/>
-                        <TextField fx:id="debounceField" prefWidth="120"/>
-                    </HBox>
+            <!-- DIVIDER -->
+            <Region styleClass="settings-nav-divider" prefWidth="1" minWidth="1" maxWidth="1"/>
 
-                    <Separator/>
-                    <Label text="File Watching" style="-fx-font-weight:bold; -fx-text-fill:#9cdcfe;"/>
-                    <CheckBox fx:id="watcherEnabledCheck" text="Enable real-time file watching"
-                              style="-fx-text-fill:#d4d4d4;"/>
+            <!-- RIGHT CONTENT (stacked pages) -->
+            <StackPane VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS" styleClass="settings-content">
 
-                    <Separator/>
-                    <Label text="Global Hotkey" style="-fx-font-weight:bold; -fx-text-fill:#9cdcfe;"/>
-                    <CheckBox fx:id="hotkeyEnabledCheck" text="Enable global hotkey"
-                              style="-fx-text-fill:#d4d4d4;"/>
-                    <HBox spacing="12" alignment="CENTER_LEFT">
-                        <Label text="Key Combination:" prefWidth="130" style="-fx-text-fill:#d4d4d4;"/>
-                        <TextField fx:id="hotkeyComboField" prefWidth="160"
-                                   promptText="e.g. ALT+SPACE"/>
-                        <Label text="(e.g. ALT+SPACE, CTRL+F1)"
-                               style="-fx-text-fill:#888888; -fx-font-size:11px;"/>
-                    </HBox>
+                <!-- ── PAGE: General ───────────────────── -->
+                <VBox fx:id="pageGeneral" styleClass="settings-page" spacing="0" visible="true" managed="true">
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS"
+                                style="-fx-background-color:transparent; -fx-border-color:transparent; -fx-background:transparent;">
+                        <VBox spacing="20" style="-fx-padding:26 30;">
 
-                    <Separator/>
-                    <CheckBox fx:id="startMinimizedCheck" text="Start minimized to system tray"
-                              style="-fx-text-fill:#d4d4d4;"/>
+                            <!-- APPEARANCE -->
+                            <Label text="APPEARANCE" styleClass="settings-section-label"/>
+                            <HBox spacing="16" alignment="CENTER_LEFT">
+                                <VBox HBox.hgrow="ALWAYS" spacing="4">
+                                    <Label text="Theme" styleClass="settings-item-label"/>
+                                    <Label text="Switch between dark and light mode" styleClass="settings-item-hint"/>
+                                </VBox>
+                                <ComboBox fx:id="themeCombo" prefWidth="130" styleClass="settings-combo"/>
+                            </HBox>
+                            <HBox spacing="16" alignment="CENTER_LEFT">
+                                <VBox HBox.hgrow="ALWAYS" spacing="4">
+                                    <Label text="Show File Icons" styleClass="settings-item-label"/>
+                                    <Label text="Display file type icons in the results list" styleClass="settings-item-hint"/>
+                                </VBox>
+                                <ToggleSwitch fx:id="showIconsCheck" styleClass="findit-toggle"/>
+                            </HBox>
+
+                            <Separator styleClass="settings-sep"/>
+
+                            <!-- SEARCH -->
+                            <Label text="SEARCH" styleClass="settings-section-label"/>
+                            <HBox spacing="16" alignment="CENTER_LEFT">
+                                <VBox HBox.hgrow="ALWAYS" spacing="4">
+                                    <Label text="Max Results" styleClass="settings-item-label"/>
+                                    <Label text="Maximum number of search results shown" styleClass="settings-item-hint"/>
+                                </VBox>
+                                <TextField fx:id="maxResultsField" prefWidth="90" styleClass="settings-field"/>
+                            </HBox>
+                            <HBox spacing="16" alignment="CENTER_LEFT">
+                                <VBox HBox.hgrow="ALWAYS" spacing="4">
+                                    <Label text="Debounce (ms)" styleClass="settings-item-label"/>
+                                    <Label text="Delay after typing before search fires" styleClass="settings-item-hint"/>
+                                </VBox>
+                                <TextField fx:id="debounceField" prefWidth="90" styleClass="settings-field"/>
+                            </HBox>
+
+                            <Separator styleClass="settings-sep"/>
+
+                            <!-- FILE WATCHING -->
+                            <Label text="FILE WATCHING" styleClass="settings-section-label"/>
+                            <HBox spacing="16" alignment="CENTER_LEFT">
+                                <VBox HBox.hgrow="ALWAYS" spacing="4">
+                                    <Label text="Real-Time Watching" styleClass="settings-item-label"/>
+                                    <Label text="Monitor for new, renamed, and deleted files" styleClass="settings-item-hint"/>
+                                </VBox>
+                                <ToggleSwitch fx:id="watcherEnabledCheck" styleClass="findit-toggle"/>
+                            </HBox>
+
+                            <Separator styleClass="settings-sep"/>
+
+                            <!-- HOTKEY -->
+                            <Label text="GLOBAL HOTKEY" styleClass="settings-section-label"/>
+                            <HBox spacing="16" alignment="CENTER_LEFT">
+                                <VBox HBox.hgrow="ALWAYS" spacing="4">
+                                    <Label text="Enable Global Hotkey" styleClass="settings-item-label"/>
+                                    <Label text="Press key combo anywhere to bring up FindIT" styleClass="settings-item-hint"/>
+                                </VBox>
+                                <ToggleSwitch fx:id="hotkeyEnabledCheck" styleClass="findit-toggle"/>
+                            </HBox>
+                            <HBox spacing="16" alignment="CENTER_LEFT">
+                                <VBox HBox.hgrow="ALWAYS" spacing="4">
+                                    <Label text="Key Combination" styleClass="settings-item-label"/>
+                                    <Label text="e.g. ALT+SPACE, CTRL+F1" styleClass="settings-item-hint"/>
+                                </VBox>
+                                <TextField fx:id="hotkeyComboField" prefWidth="140" styleClass="settings-field"
+                                           promptText="ALT+SPACE"/>
+                            </HBox>
+
+                            <Separator styleClass="settings-sep"/>
+
+                            <!-- SYSTEM TRAY -->
+                            <Label text="SYSTEM TRAY" styleClass="settings-section-label"/>
+                            <HBox spacing="16" alignment="CENTER_LEFT">
+                                <VBox HBox.hgrow="ALWAYS" spacing="4">
+                                    <Label text="Start Minimized" styleClass="settings-item-label"/>
+                                    <Label text="Launch directly to the system tray" styleClass="settings-item-hint"/>
+                                </VBox>
+                                <ToggleSwitch fx:id="startMinimizedCheck" styleClass="findit-toggle"/>
+                            </HBox>
+
+                        </VBox>
+                    </ScrollPane>
                 </VBox>
-            </ScrollPane>
-        </Tab>
 
+                <!-- ── PAGE: Exclusions ─────────────────── -->
+                <VBox fx:id="pageExclusions" styleClass="settings-page" spacing="16" visible="false" managed="false"
+                      style="-fx-padding:26 30;">
+                    <Label text="EXCLUDED PATHS" styleClass="settings-section-label"/>
+                    <Label text="Paths matching these prefixes are skipped during indexing and file watching."
+                           styleClass="settings-item-hint" wrapText="true"/>
+                    <TextArea fx:id="excludePathsArea" VBox.vgrow="ALWAYS"
+                              prefRowCount="10" wrapText="false"
+                              promptText="e.g. C:\Windows&#10;C:\Users\Someone\AppData"
+                              styleClass="settings-textarea"/>
+                    <HBox spacing="8">
+                        <Button fx:id="addExcludeBtn"    text="+ Add Path"      styleClass="settings-btn-add"/>
+                        <Button fx:id="removeExcludeBtn" text="&#x2212; Remove" styleClass="settings-btn-remove"/>
+                    </HBox>
+                </VBox>
 
-        <!-- ── Exclusions ── -->
-        <Tab text="Exclusions">
-            <VBox spacing="10" style="-fx-padding:20;">
-                <Label text="Excluded path prefixes (one per line):"
-                       style="-fx-text-fill:#d4d4d4;"/>
-                <TextArea fx:id="excludePathsArea" VBox.vgrow="ALWAYS"
-                          prefRowCount="8" wrapText="false"
-                          promptText="e.g. C:\Windows&#10;C:\Users\Someone\AppData"/>
-                <HBox spacing="8">
-                    <Button fx:id="addExcludeBtn"    text="+ Add"    styleClass="reindex-btn"/>
-                    <Button fx:id="removeExcludeBtn" text="− Remove" styleClass="reindex-btn"/>
-                </HBox>
-            </VBox>
-        </Tab>
+                <!-- ── PAGE: About ──────────────────────── -->
+                <VBox fx:id="pageAbout" styleClass="settings-page" spacing="16" alignment="TOP_CENTER"
+                      visible="false" managed="false" style="-fx-padding:48 32;">
+                    <Label text="FindIT" style="-fx-font-size:32px; -fx-font-weight:bold; -fx-text-fill:#10a37f;"/>
+                    <Label text="Version 1.0" style="-fx-font-size:13px; -fx-text-fill:#666666;"/>
+                    <Label text="High-performance desktop file search" style="-fx-font-size:14px;"/>
+                    <Hyperlink fx:id="githubLink" text="github.com/kalaiselvan-arumugam/FindIT"
+                               style="-fx-text-fill:#10a37f; -fx-border-color:transparent;"/>
+                    <Label text="Inspired by Everything by voidtools" style="-fx-font-size:12px; -fx-text-fill:#666666;"/>
+                    <Label text="Licensed under Apache License 2.0"   style="-fx-font-size:12px; -fx-text-fill:#666666;"/>
+                </VBox>
 
-        <!-- ── About ── -->
-        <Tab text="About">
-            <VBox spacing="16" alignment="TOP_CENTER" style="-fx-padding:40 20;">
-                <Label text="FindIT" style="-fx-font-size:28px; -fx-font-weight:bold; -fx-text-fill:#007acc;"/>
-                <Label text="Version 1.0" style="-fx-font-size:13px; -fx-text-fill:#888888;"/>
-                <Label text="High-performance desktop file search"
-                       style="-fx-font-size:14px; -fx-text-fill:#d4d4d4;"/>
-                <Hyperlink fx:id="githubLink" text="https://github.com/kalaiselvan-arumugam/FindIT"
-                           style="-fx-text-fill:#4fc3f7;"/>
-                <Label text="Inspired by Everything by voidtools"
-                       style="-fx-font-size:12px; -fx-text-fill:#666666;"/>
-                <Label text="Licensed under Apache License 2.0" style="-fx-font-size:12px; -fx-text-fill:#666666;"/>
-            </VBox>
-        </Tab>
-    </TabPane>
+            </StackPane>
+        </HBox>
 
-    <!-- Footer Buttons -->
-    <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding:12 20; -fx-background-color:#252526;">
-        <Button fx:id="cancelBtn" text="Cancel" prefWidth="80"
-                style="-fx-background-color:#3c3c3c; -fx-text-fill:#d4d4d4; -fx-border-color:#555555;"/>
-        <Button fx:id="saveBtn" text="Save" prefWidth="80" defaultButton="true"
-                styleClass="reindex-btn"/>
-    </HBox>
-</VBox>
+        <!-- ── Footer ──────────────────────────────────── -->
+        <HBox styleClass="settings-footer" alignment="CENTER_RIGHT" spacing="10"
+              style="-fx-background-radius: 0 0 10 10;">
+            <Button fx:id="cancelBtn" text="Cancel" prefWidth="90" styleClass="settings-btn-cancel"/>
+            <Button fx:id="saveBtn"   text="Save"   prefWidth="90" styleClass="settings-btn-save" defaultButton="true"/>
+        </HBox>
+
+    </VBox>
+</StackPane>

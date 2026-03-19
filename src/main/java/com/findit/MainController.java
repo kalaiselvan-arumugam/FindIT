@@ -53,6 +53,11 @@ public class MainController {
     @FXML private ToggleButton regexBtn;
     @FXML private Button reindexBtn;
     @FXML private Button settingsBtn;
+    // Frameless title bar
+    @FXML private javafx.scene.layout.HBox titleBar;
+    @FXML private Button minimizeBtn;
+    @FXML private Button maximizeBtn;
+    @FXML private Button closeBtn;
     @FXML private Label indexingSpinner;
     @FXML private TableView<FileEntry> resultTable;
     @FXML private TableColumn<FileEntry, String> nameCol;
@@ -90,6 +95,8 @@ public class MainController {
     // ── Other refs ────────────────────────────────────────────────────────────
     private Stage primaryStage;
     private Scene scene;
+    // Title bar drag support
+    private double dragOffsetX, dragOffsetY;
 
     // ── Table data ────────────────────────────────────────────────────────────
     private final ObservableList<FileEntry> results = FXCollections.observableArrayList();
@@ -114,6 +121,47 @@ public class MainController {
         setupSearchBar();
         setupContextMenu();
         setupKeyboardShortcuts();
+        setupTitleBar();
+    }
+
+    // ── Frameless Title Bar ───────────────────────────────────────────────────
+
+    private void setupTitleBar() {
+        if (titleBar == null) return;
+
+        // Drag to move
+        titleBar.setOnMousePressed(e -> {
+            if (primaryStage != null) {
+                dragOffsetX = e.getScreenX() - primaryStage.getX();
+                dragOffsetY = e.getScreenY() - primaryStage.getY();
+            }
+        });
+        titleBar.setOnMouseDragged(e -> {
+            if (primaryStage != null) {
+                // Restore if maximised before dragging
+                if (primaryStage.isMaximized()) {
+                    primaryStage.setMaximized(false);
+                    dragOffsetX = primaryStage.getWidth() / 2;
+                    dragOffsetY = 18;
+                }
+                primaryStage.setX(e.getScreenX() - dragOffsetX);
+                primaryStage.setY(e.getScreenY() - dragOffsetY);
+            }
+        });
+        // Double-click title bar to maximise/restore
+        titleBar.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 && primaryStage != null)
+                primaryStage.setMaximized(!primaryStage.isMaximized());
+        });
+
+        // Window buttons (wired after primaryStage is set in init())
+        if (minimizeBtn != null) minimizeBtn.setOnAction(e -> { if (primaryStage != null) primaryStage.setIconified(true); });
+        if (maximizeBtn != null) maximizeBtn.setOnAction(e -> { if (primaryStage != null) primaryStage.setMaximized(!primaryStage.isMaximized()); });
+        if (closeBtn   != null) closeBtn.setOnAction(e -> {
+            if (primaryStage != null) primaryStage.fireEvent(
+                new javafx.stage.WindowEvent(primaryStage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST)
+            );
+        });
     }
 
     // ── Table Setup ───────────────────────────────────────────────────────────
@@ -150,7 +198,7 @@ public class MainController {
 
                 if (!com.findit.util.Settings.get().showIcons()) {
                     setGraphic(null);
-                    setStyle(e.isDirectory() ? "-fx-text-fill: #dcdcaa;" : "");
+                    setStyle(e.isDirectory() ? "-fx-text-fill: #60A5FA; -fx-font-weight: bold;" : "");
                     return;
                 }
 
@@ -189,7 +237,7 @@ public class MainController {
             @Override protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null ? null : item);
-                setStyle(empty ? "" : "-fx-text-fill: #9cdcfe;");
+                setStyle(empty ? "" : "-fx-text-fill: #3A3A5C;");
             }
         });
 
@@ -199,7 +247,7 @@ public class MainController {
                 if (empty || item == null) { setText(null); return; }
                 FileEntry e = getTableView().getItems().get(getIndex());
                 setText(e.formattedSize());
-                setStyle("-fx-alignment: CENTER_RIGHT; -fx-text-fill: #ce9178;");
+                setStyle("-fx-alignment: CENTER_RIGHT; -fx-text-fill: #2E2E52;");
             }
         });
 
@@ -208,7 +256,7 @@ public class MainController {
             @Override protected void updateItem(Long item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null || item == 0 ? null : fmt.format(new Date(item)));
-                setStyle(empty ? "" : "-fx-text-fill: #b5cea8;");
+                setStyle(empty ? "" : "-fx-text-fill: #2E2E52;");
             }
         });
 
@@ -299,8 +347,7 @@ public class MainController {
         }));
 
         fileIndexer.onDirScanned(dir -> Platform.runLater(() -> {
-            // Keep it brief to prevent UI lockup/flicker
-            String brief = dir.length() > 60 ? "..." + dir.substring(dir.length() - 57) : dir;
+            String brief = dir.length() > 60 ? "…" + dir.substring(dir.length() - 57) : dir;
             stateLabel.setText("Scanning: " + brief);
         }));
 
@@ -376,16 +423,15 @@ public class MainController {
     private void openSettings() {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/findit/ui/SettingsDialog.fxml"));
-            Scene dialogScene = new Scene(loader.load(), 560, 520);
+            Scene dialogScene = new Scene(loader.load(), 750, 530);
+            dialogScene.setFill(javafx.scene.paint.Color.TRANSPARENT);
             AppTheme.apply(dialogScene);
 
             Stage dialog = new Stage();
-            dialog.setTitle("Options — FindIT");
-            try (java.io.InputStream is = getClass().getResourceAsStream("/com/findit/icons/app-icon.png")) {
-                if (is != null) dialog.getIcons().add(new javafx.scene.image.Image(is));
-            } catch (Exception ignored) {}
+            dialog.initStyle(javafx.stage.StageStyle.TRANSPARENT);
             dialog.initOwner(primaryStage);
             dialog.initModality(Modality.APPLICATION_MODAL);
+            dialog.setResizable(false);
             dialog.setScene(dialogScene);
 
             SettingsController ctrl = loader.getController();
@@ -427,7 +473,7 @@ public class MainController {
     }
 
     public void updateIndexCount(int count) {
-        Platform.runLater(() -> indexCountLabel.setText(String.format("%,d files in index", count)));
+        Platform.runLater(() -> indexCountLabel.setText(String.format("%,d files indexed", count)));
     }
 
     public void setSpinner(boolean visible) {

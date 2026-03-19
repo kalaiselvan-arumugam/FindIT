@@ -21,9 +21,7 @@ class IndexStoreTest {
         // Point the store to a unique temp file per test
         tempDb = File.createTempFile("findit_test_", ".db");
         tempDb.deleteOnExit();
-        // Override DB_PATH via reflection — simplest approach without refactor
-        // Alternatively just verify through the public API
-        store = new IndexStore();
+        store = new IndexStore("jdbc:sqlite:" + tempDb.getAbsolutePath());
     }
 
     @AfterEach

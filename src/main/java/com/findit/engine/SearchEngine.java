@@ -74,7 +74,7 @@ public class SearchEngine {
                 if (query.isEmpty()) {
                     if (generation.get() == myGen) {
                         long duration = System.currentTimeMillis() - startTime;
-                        Platform.runLater(() -> onResult.accept(List.of(), duration));
+                        runSafe(() -> onResult.accept(List.of(), duration));
                     }
                     return;
                 }
@@ -94,7 +94,7 @@ public class SearchEngine {
                             final List<FileEntry> preview = new ArrayList<>(results);
                             if (generation.get() == myGen) {
                                 long duration = System.currentTimeMillis() - startTime;
-                                Platform.runLater(() -> onResult.accept(preview, duration));
+                                runSafe(() -> onResult.accept(preview, duration));
                             }
                             previewSent = true;
                         }
@@ -106,13 +106,21 @@ public class SearchEngine {
                 if (generation.get() == myGen) {
                     final List<FileEntry> full = results;
                     long duration = System.currentTimeMillis() - startTime;
-                    Platform.runLater(() -> onResult.accept(full, duration));
+                    runSafe(() -> onResult.accept(full, duration));
                 }
 
             } catch (Exception e) {
                 if (generation.get() == myGen) LOG.warn("Search error: {}", e.getMessage());
             }
         });
+    }
+
+    private void runSafe(Runnable r) {
+        try {
+            Platform.runLater(r);
+        } catch (IllegalStateException e) {
+            r.run(); // Fallback for headless tests
+        }
     }
 
     // ── Query Parsing (unchanged) ─────────────────────────────────────────────
@@ -167,22 +175,22 @@ public class SearchEngine {
     private boolean matches(FileEntry entry, SearchQuery query,
                             List<CompiledTerm> excludes,
                             List<List<CompiledTerm>> orGroups) {
-        String target = query.matchPath() ? entry.path() : entry.name();
+        boolean globalMatchPath = query.matchPath();
 
         for (CompiledTerm ex : excludes) {
-            if (ex.matches(target)) return false;
+            if (ex.matches(entry, globalMatchPath)) return false;
         }
         if (orGroups.isEmpty()) return true;
 
         for (List<CompiledTerm> group : orGroups) {
-            if (groupMatches(group, target)) return true;
+            if (groupMatches(group, entry, globalMatchPath)) return true;
         }
         return false;
     }
 
-    private boolean groupMatches(List<CompiledTerm> terms, String target) {
+    private boolean groupMatches(List<CompiledTerm> terms, FileEntry entry, boolean globalMatchPath) {
         for (CompiledTerm term : terms) {
-            if (!term.matches(target)) return false;
+            if (!term.matches(entry, globalMatchPath)) return false;
         }
         return true;
     }
@@ -192,39 +200,123 @@ public class SearchEngine {
     static class CompiledTerm {
         final Pattern pattern;
         final boolean isWildcard;
+        final List<Pattern> multiWildcards;
         final boolean wholeWord;
         final boolean matchCase;
         final String raw;
-        /** Non-null when the user typed an invalid regex (re: prefix). */
         final String regexError;
 
-        CompiledTerm(String raw, SearchQuery context) {
-            this.raw = raw;
+        final boolean isSizeFilter;
+        final long sizeThreshold;
+        final boolean sizeGreater;
+        final boolean forcePathMatch;
+        final List<String> multiPaths;
+
+        CompiledTerm(String originalRaw, SearchQuery context) {
+            String workingRaw = originalRaw;
             this.wholeWord = context.wholeWord();
             this.matchCase = context.matchCase();
+
+            boolean sizeF = false;
+            long sThresh = 0;
+            boolean sGreater = true;
+            boolean fPath = false;
+            List<String> mPaths = null;
+
+            if (workingRaw.toLowerCase().startsWith("size:")) {
+                sizeF = true;
+                String s = workingRaw.substring(5).toLowerCase().trim();
+                if (s.startsWith("<")) { sGreater = false; s = s.substring(1).trim(); }
+                else if (s.startsWith(">")) { sGreater = true; s = s.substring(1).trim(); }
+                long mult = 1;
+                if (s.endsWith("gb") || s.endsWith("g")) { mult = 1024L*1024*1024; s = s.replaceAll("[a-z]", ""); }
+                else if (s.endsWith("mb") || s.endsWith("m")) { mult = 1024L*1024; s = s.replaceAll("[a-z]", ""); }
+                else if (s.endsWith("kb") || s.endsWith("k")) { mult = 1024L; s = s.replaceAll("[a-z]", ""); }
+                else { s = s.replaceAll("[a-z]", ""); }
+                try { sThresh = (long) (Double.parseDouble(s) * mult); } catch (Exception ignored) {}
+            } else if (workingRaw.toLowerCase().startsWith("path:")) {
+                fPath = true;
+                workingRaw = workingRaw.substring(5);
+                if (workingRaw.contains(",")) {
+                    mPaths = new ArrayList<>();
+                    for (String part : workingRaw.split(",")) {
+                        String trimmed = part.trim();
+                        if (!trimmed.isEmpty()) mPaths.add(trimmed);
+                    }
+                }
+            }
+
+            this.isSizeFilter = sizeF;
+            this.sizeThreshold = sThresh;
+            this.sizeGreater = sGreater;
+            this.forcePathMatch = fPath;
+            this.multiPaths = mPaths;
+            this.raw = workingRaw;
+
             Pattern pc = null;
             boolean wildcard = false;
+            List<Pattern> mWildcards = null;
             String err = null;
-            if (raw.startsWith(REGEX_PREFIX) || context.regexMode()) {
-                String p = raw.startsWith(REGEX_PREFIX) ? raw.substring(REGEX_PREFIX.length()) : raw;
-                int flags = context.matchCase() ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
-                try { pc = Pattern.compile(p, flags); }
-                catch (PatternSyntaxException e) { err = e.getDescription(); }
-            } else if (WildcardMatcher.isWildcard(raw)) {
-                pc = WildcardMatcher.toPattern(raw, context.matchCase());
-                wildcard = true;
+
+            if (!isSizeFilter) {
+                if (workingRaw.startsWith(REGEX_PREFIX) || context.regexMode()) {
+                    String p = workingRaw.startsWith(REGEX_PREFIX) ? workingRaw.substring(REGEX_PREFIX.length()) : workingRaw;
+                    int flags = context.matchCase() ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+                    try { pc = Pattern.compile(p, flags); }
+                    catch (PatternSyntaxException e) { err = e.getDescription(); }
+                } else if (workingRaw.toLowerCase().startsWith("ext:")) {
+                    String extStr = workingRaw.substring(4);
+                    if (extStr.contains(",")) {
+                        mWildcards = new ArrayList<>();
+                        for (String ext : extStr.split(",")) {
+                            ext = ext.trim();
+                            if (!ext.isEmpty()) {
+                                mWildcards.add(WildcardMatcher.toPattern("*." + (ext.startsWith(".") ? ext.substring(1) : ext), context.matchCase()));
+                            }
+                        }
+                    } else {
+                        String ext = extStr.trim();
+                        pc = WildcardMatcher.toPattern("*." + (ext.startsWith(".") ? ext.substring(1) : ext), context.matchCase());
+                        wildcard = true;
+                    }
+                } else if (WildcardMatcher.isWildcard(workingRaw)) {
+                    pc = WildcardMatcher.toPattern(workingRaw, context.matchCase());
+                    wildcard = true;
+                }
             }
+
             this.pattern = pc;
             this.isWildcard = wildcard;
+            this.multiWildcards = mWildcards;
             this.regexError = err;
         }
 
-        boolean matches(String target) {
+        boolean matches(FileEntry entry, boolean globalMatchPath) {
+            if (isSizeFilter) {
+                if (entry.isDirectory()) return false;
+                return sizeGreater ? entry.size() >= sizeThreshold : entry.size() <= sizeThreshold;
+            }
+
+            String target = (globalMatchPath || forcePathMatch) ? entry.path() : entry.name();
+
+            if (forcePathMatch && multiPaths != null) {
+                for (String p : multiPaths) {
+                    boolean pMatches = matchCase ? (wholeWord ? containsWholeWordExact(target, p) : target.contains(p)) 
+                                                 : (wholeWord ? containsWholeWordIgnoreCase(target, p) : containsIgnoreCase(target, p));
+                    if (pMatches) return true;
+                }
+                return false;
+            }
+
+            if (multiWildcards != null) {
+                for (Pattern p : multiWildcards) {
+                    if (p.matcher(target).matches()) return true;
+                }
+                return false;
+            }
+
             if (pattern != null) {
-                // Wildcard patterns must match the whole string (shell glob semantics).
-                // Regex (re:) patterns use find() so they can match substrings.
-                return isWildcard ? pattern.matcher(target).matches()
-                                  : pattern.matcher(target).find();
+                return isWildcard ? pattern.matcher(target).matches() : pattern.matcher(target).find();
             }
             if (matchCase) {
                 return wholeWord ? containsWholeWordExact(target, raw) : target.contains(raw);

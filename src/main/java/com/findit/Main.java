@@ -12,11 +12,15 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.imageio.ImageIO;
-import java.awt.*;
+import java.awt.MenuItem;
+import java.awt.PopupMenu;
+import java.awt.SystemTray;
+import java.awt.TrayIcon;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.util.List;
@@ -64,6 +68,7 @@ public class Main extends Application {
         AppTheme.apply(scene);
 
         stage.setTitle("FindIT");
+        stage.initStyle(StageStyle.UNDECORATED);
         stage.setScene(scene);
         stage.setMinWidth(800);
         stage.setMinHeight(480);
@@ -79,7 +84,11 @@ public class Main extends Application {
             }
         });
 
-        stage.show();
+        if (Settings.get().startMinimized() && SystemTray.isSupported()) {
+            LOG.info("Starting minimized to system tray");
+        } else {
+            stage.show();
+        }
 
         // ── Wire controller ────────────────────────────────────────────────
         controller = loader.getController();

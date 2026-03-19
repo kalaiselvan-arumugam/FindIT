@@ -8,7 +8,6 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
 
 /**
  * Auto-detects mounted drives/volumes and polls for new/removed removable media.
@@ -38,19 +37,13 @@ public class DriveMonitor {
         return t;
     });
 
-    /** Callback invoked on JavaFX thread when a new drive is found (passes root path). */
-    private Consumer<String> onDriveAdded;
-    /** Callback invoked on JavaFX thread when a drive is removed (passes root path). */
-    private Consumer<String> onDriveRemoved;
+
 
     public DriveMonitor(FileIndex fileIndex, FileIndexer fileIndexer, IndexStore indexStore) {
         this.fileIndex   = fileIndex;
         this.fileIndexer = fileIndexer;
         this.indexStore  = indexStore;
     }
-
-    public void onDriveAdded(Consumer<String> cb)   { this.onDriveAdded   = cb; }
-    public void onDriveRemoved(Consumer<String> cb) { this.onDriveRemoved = cb; }
 
     /** Returns all readable root paths on this platform right now. */
     public static List<String> detectAllRoots() {
@@ -84,9 +77,6 @@ public class DriveMonitor {
         for (String root : current) {
             if (knownRoots.add(root)) {              // add() returns true if newly inserted
                 LOG.info("New drive detected: {}", root);
-                if (onDriveAdded != null) {
-                    javafx.application.Platform.runLater(() -> onDriveAdded.accept(root));
-                }
                 fileIndexer.indexRoot(Path.of(root)); // incremental — does NOT clear existing
             }
         }
@@ -97,9 +87,6 @@ public class DriveMonitor {
         for (String root : removed) {
             knownRoots.remove(root);
             LOG.info("Drive removed: {}", root);
-            if (onDriveRemoved != null) {
-                javafx.application.Platform.runLater(() -> onDriveRemoved.accept(root));
-            }
             removeRootFromIndex(root);
         }
     }

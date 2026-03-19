@@ -49,56 +49,78 @@ public class GlobalHotkeyManager {
             return;
         }
 
-        try {
-            boolean ok = User32.INSTANCE.RegisterHotKey(null, HOTKEY_ID, modVk[0], modVk[1]);
-            if (!ok) {
-                LOG.warn("RegisterHotKey failed for {} — key may be in use by another app", combo);
-                return;
-            }
-        } catch (Exception e) {
-            LOG.warn("RegisterHotKey error: {}", e.getMessage());
-            return;
-        }
-
         running = true;
         pollThread = new Thread(() -> {
+            try {
+                boolean ok = User32.INSTANCE.RegisterHotKey(null, HOTKEY_ID, modVk[0], modVk[1]);
+                if (!ok) {
+                    LOG.warn("RegisterHotKey failed for {} — key may be in use by another app", combo);
+                    return;
+                }
+            } catch (Exception e) {
+                LOG.warn("RegisterHotKey error: {}", e.getMessage());
+                return;
+            }
+            LOG.info("Global hotkey registered: {}", combo);
+
             WinUser.MSG msg = new WinUser.MSG();
             while (running) {
                 try {
-                    int result = User32.INSTANCE.GetMessage(msg, null, 0, 0);
-                    if (result <= 0) break; // 0 = WM_QUIT, -1 = error
-                    if (msg.message == WM_HOTKEY && msg.wParam.intValue() == HOTKEY_ID) {
-                        Platform.runLater(onActivate);
+                    // PeekMessage with PM_REMOVE (0x0001) doesn't block forever
+                    boolean hasMsg = User32.INSTANCE.PeekMessage(msg, null, 0, 0, 1);
+                    if (hasMsg) {
+                        if (msg.message == WM_HOTKEY && msg.wParam.intValue() == HOTKEY_ID) {
+                            Platform.runLater(onActivate);
+                        }
+                    } else {
+                        Thread.sleep(50); 
                     }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
                 } catch (Exception e) {
                     if (running) LOG.debug("Hotkey poll error: {}", e.getMessage());
                 }
             }
+            
+            // Unregister MUST happen on the thread that registered it
+            try { User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID); } catch (Exception ignored) {}
         }, "findit-hotkey");
         pollThread.setDaemon(true);
         pollThread.start();
-        LOG.info("Global hotkey registered: {}", combo);
     }
 
     public void unregister() {
         running = false;
-        if (pollThread != null) { pollThread.interrupt(); pollThread = null; }
-        if (!IS_WINDOWS) return;
-        try { User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID); } catch (Exception ignored) {}
+        if (pollThread != null) { 
+            pollThread.interrupt(); 
+            pollThread = null; 
+        }
+        // Native UnregisterHotKey moved to thread cleanup block
     }
 
-    /** Parse "ALT+SPACE", "CTRL+F1", etc. → [modifiers, vkCode] */
+    /** Parse robustly: "ALT+SPACE", "ALT_CTRL+F1", etc. → [modifiers, vkCode] */
     private int[] parseCombo(String combo) {
         if (combo == null || combo.isBlank()) return null;
         int modifiers = 0, vk = 0;
-        for (String part : combo.toUpperCase().split("\\+")) {
-            switch (part.trim()) {
-                case "ALT"     -> modifiers |= MOD_ALT;
-                case "CTRL", "CONTROL" -> modifiers |= MOD_CTRL;
-                case "SHIFT"   -> modifiers |= MOD_SHIFT;
-                case "WIN"     -> modifiers |= MOD_WIN;
-                default        -> vk = resolveVk(part.trim());
-            }
+        String upper = combo.toUpperCase();
+        
+        if (upper.contains("ALT")) modifiers |= MOD_ALT;
+        if (upper.contains("CTRL") || upper.contains("CONTROL")) modifiers |= MOD_CTRL;
+        if (upper.contains("SHIFT")) modifiers |= MOD_SHIFT;
+        if (upper.contains("WIN")) modifiers |= MOD_WIN;
+        
+        String remainder = upper
+            .replace("ALT", "")
+            .replace("CONTROL", "")
+            .replace("CTRL", "")
+            .replace("SHIFT", "")
+            .replace("WIN", "")
+            .replaceAll("[+\\-_ ]", "")
+            .trim();
+        
+        if (!remainder.isEmpty()) {
+            vk = resolveVk(remainder);
         }
         return vk != 0 ? new int[]{modifiers, vk} : null;
     }
